@@ -53,7 +53,11 @@ void OperationRelinquishAcknowledge::execute() {
 
   hash_code = Utility::range_hash_code(m_table, m_range, "OperationMoveRange");
 
+  HT_MAYBE_FAIL("relinquish-acknowledge-INITIAL-a");
+  HT_MAYBE_FAIL("relinquish-acknowledge-INITIAL-b");
+
   m_context->removal_manager->approve_removal(hash_code);
+
   complete_ok_no_log();
   {
     ScopedLock lock(m_mutex);
