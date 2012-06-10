@@ -683,7 +683,8 @@ void Range::relinquish_compact_and_finish() {
            m_metalog_entity->table.id, m_metalog_entity->spec.start_row,
            m_metalog_entity->spec.end_row);
 
-  m_master_client->move_range(&m_metalog_entity->table, m_metalog_entity->spec,
+  m_master_client->move_range(Global::location_initializer->get(),
+			      &m_metalog_entity->table, m_metalog_entity->spec,
                               m_metalog_entity->state.transfer_log,
                               m_metalog_entity->state.soft_limit, false);
 
@@ -1139,7 +1140,8 @@ void Range::split_notify_master() {
       soft_limit = Global::range_split_size;
   }
 
-  m_master_client->move_range(&m_metalog_entity->table, range,
+  m_master_client->move_range(Global::location_initializer->get(),
+			      &m_metalog_entity->table, range,
                               m_metalog_entity->state.transfer_log,
                               soft_limit, true);
 

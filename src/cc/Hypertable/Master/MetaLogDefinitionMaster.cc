@@ -68,7 +68,8 @@ Entity *DefinitionMaster::create(uint16_t log_version, const EntityHeader &heade
     return new OperationDropTable(m_context, header);
   else if (header.type == EntityType::OPERATION_RENAME_TABLE)
     return new OperationRenameTable(m_context, header);
-  else if (header.type == EntityType::OPERATION_MOVE_RANGE)
+  else if (header.type == EntityType::OPERATION_MOVE_RANGE ||
+	   header.type == EntityType::OPERATION_MOVE_RANGE_NEW)
     return new OperationMoveRange(m_context, header);
   else if (header.type == EntityType::OPERATION_BALANCE)
     return new OperationBalance(m_context, header);

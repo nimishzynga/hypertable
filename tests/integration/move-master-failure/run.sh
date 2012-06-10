@@ -6,6 +6,7 @@ NUM_POLLS=${NUM_POLLS:-"10"}
 WRITE_SIZE=${WRITE_SIZE:-"40000000"}
 RS1_PIDFILE=$HT_HOME/run/Hypertable.RangeServer.rs1.pid
 RS2_PIDFILE=$HT_HOME/run/Hypertable.RangeServer.rs2.pid
+RET=0
 
 $HT_HOME/bin/start-test-servers.sh --clear --no-rangeserver --Hypertable.Master.Split.SoftLimitEnabled=false
 
@@ -92,8 +93,9 @@ $HT_HOME/bin/ht ht_load_generator update \
     --row-seed=2 \
     --Field.value.size=1000 \
     --max-bytes=$WRITE_SIZE
+RET=$?
 
 kill -9 `cat $HT_HOME/run/Hypertable.RangeServer.rs?.pid`
 $HT_HOME/bin/stop-servers.sh
 
-exit 0
+exit $RET

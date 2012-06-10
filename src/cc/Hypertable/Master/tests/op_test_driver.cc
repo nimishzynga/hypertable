@@ -752,7 +752,7 @@ void move_range_test(ContextPtr &context) {
   range.start_row = "bar";
   range.end_row = "foo";
 
-  move_range_operation = new OperationMoveRange(context, table, range, transfer_log, soft_limit, true);
+  move_range_operation = new OperationMoveRange(context, "rs1", table, range, transfer_log, soft_limit, true);
 
   entities.push_back( move_range_operation.get() );
 

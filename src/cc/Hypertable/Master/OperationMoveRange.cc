@@ -39,12 +39,13 @@
 using namespace Hypertable;
 using namespace Hyperspace;
 
-OperationMoveRange::OperationMoveRange(ContextPtr &context, const TableIdentifier &table,
-                                       const RangeSpec &range, const String &transfer_log,
+OperationMoveRange::OperationMoveRange(ContextPtr &context, const String &source,
+				       const TableIdentifier &table, const RangeSpec &range,
+				       const String &transfer_log,
                                        uint64_t soft_limit, bool is_split)
-  : Operation(context, MetaLog::EntityType::OPERATION_MOVE_RANGE),
+  : Operation(context, MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW),
     m_table(table), m_range(range), m_transfer_log(transfer_log),
-    m_soft_limit(soft_limit), m_is_split(is_split) {
+    m_soft_limit(soft_limit), m_is_split(is_split), m_source(source), m_approval_count(0) {
   m_range_name = format("%s[%s..%s]", m_table.id, m_range.start_row, m_range.end_row);
   initialize_dependencies();
   m_hash_code = Utility::range_hash_code(m_table, m_range, "OperationMoveRange");
@@ -52,11 +53,11 @@ OperationMoveRange::OperationMoveRange(ContextPtr &context, const TableIdentifie
 
 OperationMoveRange::OperationMoveRange(ContextPtr &context,
                                        const MetaLog::EntityHeader &header_)
-  : Operation(context, header_) {
+  : Operation(context, header_), m_source("UNKNOWN"), m_approval_count(0) {
 }
 
 OperationMoveRange::OperationMoveRange(ContextPtr &context, EventPtr &event)
-  : Operation(context, event, MetaLog::EntityType::OPERATION_MOVE_RANGE) {
+  : Operation(context, event, MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW), m_approval_count(0) {
   const uint8_t *ptr = event->payload;
   size_t remaining = event->payload_len;
   decode_request(&ptr, &remaining);
@@ -100,11 +101,11 @@ void OperationMoveRange::execute() {
   switch (state) {
 
   case OperationState::INITIAL:
-    if (!m_context->balancer->get_destination(m_table, m_range, m_location))
+    if (!m_context->balancer->get_destination(m_table, m_range, m_destination))
       return;
     {
       ScopedLock lock(m_mutex);
-      m_dependencies.insert(m_location);
+      m_dependencies.insert(m_destination);
       m_state = OperationState::STARTED;
     }
     HT_MAYBE_FAIL("move-range-INITIAL-a");
@@ -138,17 +139,17 @@ void OperationMoveRange::execute() {
       TableIdentifier *table = &m_table;
       RangeSpec *range = &m_range;
 
-      addr.set_proxy(m_location);
+      addr.set_proxy(m_destination);
       range_state.soft_limit = m_soft_limit;
       if (m_context->test_mode)
-        HT_WARNF("Skipping %s::load_range() because in TEST MODE", m_location.c_str());
+        HT_WARNF("Skipping %s::load_range() because in TEST MODE", m_destination.c_str());
       else
         rsc.load_range(addr, *table, *range, m_transfer_log.c_str(), range_state, !m_is_split);
     }
     catch (Exception &e) {
       if (e.code() != Error::RANGESERVER_RANGE_ALREADY_LOADED) {
         if (e.code() != Error::RANGESERVER_TABLE_DROPPED &&
-            !m_context->reassigned(&m_table, m_range, m_location)) {
+            !m_context->reassigned(&m_table, m_range, m_destination)) {
           if (!Utility::table_exists(m_context, m_table.id)) {
             HT_WARNF("Aborting MoveRange %s because table no longer exists",
                      m_range_name.c_str());
@@ -156,9 +157,9 @@ void OperationMoveRange::execute() {
             complete_ok();
             return;
           }
-          if (!m_context->is_connected(m_location))
+          if (!m_context->is_connected(m_destination))
             return;
-          HT_THROW2(e.code(), e, format("MoveRange %s to %s", m_range_name.c_str(), m_location.c_str()));
+          HT_THROW2(e.code(), e, format("MoveRange %s to %s", m_range_name.c_str(), m_destination.c_str()));
         }
         m_context->balancer->move_complete(m_table, m_range, e.code());
         complete_ok();
@@ -176,9 +177,9 @@ void OperationMoveRange::execute() {
       TableIdentifier *table = &m_table;
       RangeSpec *range = &m_range;
 
-      addr.set_proxy(m_location);
+      addr.set_proxy(m_destination);
       if (m_context->test_mode)
-        HT_WARNF("Skipping %s::acknowledge_load() because in TEST MODE", m_location.c_str());
+        HT_WARNF("Skipping %s::acknowledge_load() because in TEST MODE", m_destination.c_str());
       else {
         try {
           rsc.acknowledge_load(addr, *table, *range);
@@ -204,37 +205,46 @@ void OperationMoveRange::execute() {
   }
 
   HT_INFOF("Leaving MoveRange-%lld %s -> %s",
-           (Lld)header.id, m_range_name.c_str(), m_location.c_str());
+           (Lld)header.id, m_range_name.c_str(), m_destination.c_str());
 }
 
 
 void OperationMoveRange::display_state(std::ostream &os) {
   os << " " << m_table << " " << m_range << " transfer-log='" << m_transfer_log;
   os << "' soft-limit=" << m_soft_limit << " is_split=" << ((m_is_split) ? "true" : "false");
-  os << " location='" << m_location << " ";
+  os << " location='" << m_destination << " ";
 }
 
 size_t OperationMoveRange::encoded_state_length() const {
-  return m_table.encoded_length() + m_range.encoded_length() +
+  return Serialization::encoded_length_vstr(m_source) +
+    m_table.encoded_length() + m_range.encoded_length() +
     Serialization::encoded_length_vstr(m_transfer_log) + 9 +
-    Serialization::encoded_length_vstr(m_location);
+    Serialization::encoded_length_vstr(m_destination) + 4;
 }
 
 void OperationMoveRange::encode_state(uint8_t **bufp) const {
+  Serialization::encode_vstr(bufp, m_source);
   m_table.encode(bufp);
   m_range.encode(bufp);
   Serialization::encode_vstr(bufp, m_transfer_log);
   Serialization::encode_i64(bufp, m_soft_limit);
   Serialization::encode_bool(bufp, m_is_split);
-  Serialization::encode_vstr(bufp, m_location);
+  Serialization::encode_vstr(bufp, m_destination);
+  Serialization::encode_i32(bufp, m_approval_count);
 }
 
 void OperationMoveRange::decode_state(const uint8_t **bufp, size_t *remainp) {
   decode_request(bufp, remainp);
-  m_location = Serialization::decode_vstr(bufp, remainp);
+  m_destination = Serialization::decode_vstr(bufp, remainp);
+  if (header.type == MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW)
+    m_approval_count = Serialization::decode_i32(bufp, remainp);
+  else
+    header.type = MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW;
 }
 
 void OperationMoveRange::decode_request(const uint8_t **bufp, size_t *remainp) {
+  if (header.type == MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW)
+    m_source = Serialization::decode_vstr(bufp, remainp);
   m_table.decode(bufp, remainp);
   m_range.decode(bufp, remainp);
   m_transfer_log = Serialization::decode_vstr(bufp, remainp);
