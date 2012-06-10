@@ -26,6 +26,7 @@
 #include <ctime>
 
 #include "Operation.h"
+#include "ReferenceManager.h"
 
 using namespace Hypertable;
 
@@ -242,7 +243,12 @@ void Operation::complete_error(Exception &e) {
 
 void Operation::complete_ok() {
   complete_ok_no_log();
-  m_context->mml_writer->record_state(this);
+  if (remove_explicitly() && remove_ok()) {
+    m_context->reference_manager->remove(this);
+    m_context->mml_writer->record_removal(this);
+  }
+  else
+    m_context->mml_writer->record_state(this);
 }
 
 void Operation::complete_ok_no_log() {

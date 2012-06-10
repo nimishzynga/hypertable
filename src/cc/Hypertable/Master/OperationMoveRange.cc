@@ -48,7 +48,7 @@ OperationMoveRange::OperationMoveRange(ContextPtr &context, const String &source
     m_soft_limit(soft_limit), m_is_split(is_split), m_source(source) {
   m_range_name = format("%s[%s..%s]", m_table.id, m_range.start_row, m_range.end_row);
   initialize_dependencies();
-  m_hash_code = Utility::range_hash_code(m_table, m_range, "OperationMoveRange");
+  m_hash_code = Utility::range_hash_code(m_table, m_range, String("OperationMoveRange-") + m_source);
 }
 
 OperationMoveRange::OperationMoveRange(ContextPtr &context,
@@ -67,7 +67,7 @@ void OperationMoveRange::initialize_dependencies() {
   m_exclusivities.insert(Utility::range_hash_string(m_table, m_range, "OperationMoveRange"));
   m_dependencies.insert(Dependency::INIT);
   m_dependencies.insert(Dependency::SERVERS);
-  m_dependencies.insert(Utility::range_hash_string(m_table, m_range));
+  m_dependencies.insert(Utility::range_hash_string(m_table, m_range, ""));
   if (!strcmp(m_table.id, TableIdentifier::METADATA_ID)) {
     if (*m_range.start_row == 0 && !strcmp(m_range.end_row, Key::END_ROOT_ROW))
       m_obstructions.insert(Dependency::ROOT);
@@ -154,6 +154,7 @@ void OperationMoveRange::execute() {
             HT_WARNF("Aborting MoveRange %s because table no longer exists",
                      m_range_name.c_str());
             m_context->balancer->move_complete(m_table, m_range, Error::TABLE_NOT_FOUND);
+	    remove_approval_add(0x03);
             complete_ok();
             return;
           }
@@ -161,7 +162,10 @@ void OperationMoveRange::execute() {
             return;
           HT_THROW2(e.code(), e, format("MoveRange %s to %s", m_range_name.c_str(), m_destination.c_str()));
         }
+	// TODO:  The following code is only correct for TABLE_DROPPED, if the
+	// range was reassigned, we should restart with new assignment
         m_context->balancer->move_complete(m_table, m_range, e.code());
+	remove_approval_add(0x03);
         complete_ok();
         return;
       }
@@ -194,6 +198,7 @@ void OperationMoveRange::execute() {
       }
     }
     m_context->balancer->move_complete(m_table, m_range);
+    remove_approval_add(0x02);
     complete_ok();
     break;
 
@@ -248,7 +253,7 @@ void OperationMoveRange::decode_request(const uint8_t **bufp, size_t *remainp) {
   m_soft_limit = Serialization::decode_i64(bufp, remainp);
   m_is_split = Serialization::decode_bool(bufp, remainp);
   m_range_name = format("%s[%s..%s]", m_table.id, m_range.start_row, m_range.end_row);
-  m_hash_code = Utility::range_hash_code(m_table, m_range, "OperationMoveRange");
+  m_hash_code = Utility::range_hash_code(m_table, m_range, String("OperationMoveRange-") + m_source);
 }
 
 void OperationMoveRange::decode_result(const uint8_t **bufp, size_t *remainp) {

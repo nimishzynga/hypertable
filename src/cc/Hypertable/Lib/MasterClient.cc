@@ -553,8 +553,8 @@ MasterClient::move_range(const String &source, TableIdentifier *table,
 
 
 void
-MasterClient::relinquish_acknowledge(TableIdentifier *table, RangeSpec &range,
-                                     DispatchHandler *handler, Timer *timer) {
+MasterClient::relinquish_acknowledge(const String &source, TableIdentifier *table,
+				     RangeSpec &range, DispatchHandler *handler, Timer *timer) {
   Timer tmp_timer(m_timeout_ms);
   CommBufPtr cbp;
   EventPtr event;
@@ -565,7 +565,7 @@ MasterClient::relinquish_acknowledge(TableIdentifier *table, RangeSpec &range,
   initialize(timer, tmp_timer);
 
   while (!timer->expired()) {
-    cbp = MasterProtocol::create_relinquish_acknowledge_request(table, range);
+    cbp = MasterProtocol::create_relinquish_acknowledge_request(source, table, range);
     if (!send_message(cbp, timer, event, label))
       continue;
     const uint8_t *ptr = event->payload + 4;
@@ -587,8 +587,8 @@ MasterClient::relinquish_acknowledge(TableIdentifier *table, RangeSpec &range,
 
 
 void
-MasterClient::relinquish_acknowledge(TableIdentifier *table, RangeSpec &range,
-                                     Timer *timer) {
+MasterClient::relinquish_acknowledge(const String &source, TableIdentifier *table,
+				     RangeSpec &range, Timer *timer) {
   Timer tmp_timer(m_timeout_ms);
   CommBufPtr cbp;
   EventPtr event;
@@ -599,7 +599,7 @@ MasterClient::relinquish_acknowledge(TableIdentifier *table, RangeSpec &range,
   initialize(timer, tmp_timer);
 
   while (!timer->expired()) {
-    cbp = MasterProtocol::create_relinquish_acknowledge_request(table, range);
+    cbp = MasterProtocol::create_relinquish_acknowledge_request(source, table, range);
     if (!send_message(cbp, timer, event, label))
       continue;
     const uint8_t *ptr = event->payload + 4;

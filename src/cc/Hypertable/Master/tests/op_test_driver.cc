@@ -46,7 +46,7 @@
 #include "Hypertable/Master/OperationRenameTable.h"
 #include "Hypertable/Master/OperationSystemUpgrade.h"
 #include "Hypertable/Master/OperationMoveRange.h"
-#include "Hypertable/Master/RemovalManager.h"
+#include "Hypertable/Master/ReferenceManager.h"
 #include "Hypertable/Master/ResponseManager.h"
 
 #include <boost/algorithm/string.hpp>
@@ -107,7 +107,7 @@ namespace {
     for (size_t i=0; i<entities.size(); i++) {
       if ((operation = dynamic_cast<Operation *>(entities[i].get()))) {
 	if (operation->remove_explicitly())
-	  context->removal_manager->add_operation(operation);
+	  context->reference_manager->add(operation);
         context->op->add_operation(operation);
       }
     }
@@ -134,7 +134,7 @@ namespace {
     for (size_t i=0; i<entities.size(); i++) {
       if ((operation = dynamic_cast<Operation *>(entities[i].get()))) {
 	if (operation->remove_explicitly())
-	  context->removal_manager->add_operation(operation);
+	  context->reference_manager->add(operation);
         operations.push_back(operation);
       }
     }
@@ -261,7 +261,7 @@ int main(int argc, char **argv) {
     context->response_manager = new ResponseManager(rmctx);
     Thread response_manager_thread(*context->response_manager);
 
-    context->removal_manager = new RemovalManager(context->mml_writer);
+    context->reference_manager = new ReferenceManager();
 
     String testname = get_str("test");
 

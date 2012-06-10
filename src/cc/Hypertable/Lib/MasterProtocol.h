@@ -79,7 +79,8 @@ namespace Hypertable {
                               const RangeSpec &, const String &transfer_log_dir,
                               uint64_t soft_limit, bool split);
     static CommBuf *
-    create_relinquish_acknowledge_request(const TableIdentifier *, const RangeSpec &);
+    create_relinquish_acknowledge_request(const String &, const TableIdentifier *,
+					  const RangeSpec &);
     static CommBuf *create_rename_table_request(const String &old_name, const String &new_name);
     static CommBuf *create_drop_table_request(const String &table_name,
                                               bool if_exists);

@@ -116,8 +116,13 @@ namespace Hypertable {
     HiResTime expiration_time() { ScopedLock lock(m_mutex); return m_expiration_time; }
 
     virtual bool remove_explicitly() { return false; }
-    virtual int remove_approvals_required() { return 0; }
-    bool remove_ok() { return m_remove_approvals >= remove_approvals_required(); }
+    virtual int32_t remove_approval_mask() { return 0; }
+    bool remove_approval_add(int32_t approval) {
+      ScopedLock lock(m_mutex);
+      m_remove_approvals |= approval;
+      return m_remove_approvals == remove_approval_mask();
+    }
+    bool remove_ok() { ScopedLock lock(m_mutex); return m_remove_approvals == remove_approval_mask(); }
 
     void complete_error(int error, const String &msg);
     void complete_error_no_log(int error, const String &msg);

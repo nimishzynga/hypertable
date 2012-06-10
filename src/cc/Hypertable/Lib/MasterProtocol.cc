@@ -129,11 +129,14 @@ namespace Hypertable {
 
 
   CommBuf *
-  MasterProtocol::create_relinquish_acknowledge_request(const TableIdentifier *table,
+  MasterProtocol::create_relinquish_acknowledge_request(const String &source,
+							const TableIdentifier *table,
                                                         const RangeSpec &range) {
     CommHeader header(COMMAND_RELINQUISH_ACKNOWLEDGE);
-    CommBuf *cbuf = new CommBuf(header, table->encoded_length()
+    CommBuf *cbuf = new CommBuf(header, encoded_length_vstr(source)
+				+ table->encoded_length()
                                 + range.encoded_length());
+    cbuf->append_vstr(source);
     table->encode(cbuf->get_data_ptr_address());
     range.encode(cbuf->get_data_ptr_address());
     return cbuf;

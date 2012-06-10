@@ -709,7 +709,8 @@ void Range::relinquish_compact_and_finish() {
 
   // Acknowledge RSML update
   try {
-    m_master_client->relinquish_acknowledge(&m_metalog_entity->table,
+    m_master_client->relinquish_acknowledge(Global::location_initializer->get(),
+					    &m_metalog_entity->table,
                                             m_metalog_entity->spec, (DispatchHandler *)0);
   }
   catch (Exception &e) {
@@ -1180,7 +1181,8 @@ void Range::split_notify_master() {
 
   // Acknowledge RSML update
   try {
-    m_master_client->relinquish_acknowledge(&m_metalog_entity->table, range,
+    m_master_client->relinquish_acknowledge(Global::location_initializer->get(),
+					    &m_metalog_entity->table, range,
                                             (DispatchHandler *)0);
   }
   catch (Exception &e) {
