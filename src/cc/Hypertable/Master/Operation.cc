@@ -40,7 +40,7 @@ const char *OperationState::get_text(int32_t state);
 
 Operation::Operation(ContextPtr &context, int32_t type)
   : MetaLog::Entity(type), m_context(context), m_state(OperationState::INITIAL),
-    m_error(0), m_blocked(false) {
+    m_error(0), m_remove_approvals(0), m_original_type(0), m_blocked(false) {
   int32_t timeout = m_context->props->get_i32("Hypertable.Request.Timeout");
   m_expiration_time.sec = time(0) + timeout/1000;
   m_expiration_time.nsec = (timeout%1000) * 1000000LL;
@@ -49,7 +49,7 @@ Operation::Operation(ContextPtr &context, int32_t type)
 
 Operation::Operation(ContextPtr &context, EventPtr &event, int32_t type)
   : MetaLog::Entity(type), m_context(context), m_event(event), m_state(OperationState::INITIAL),
-    m_error(0), m_blocked(false) {
+    m_error(0), m_remove_approvals(0), m_original_type(0), m_blocked(false) {
   m_expiration_time.sec = time(0) + m_event->header.timeout_ms/1000;
   m_expiration_time.nsec = (m_event->header.timeout_ms%1000) * 1000000LL;
   m_hash_code = (int64_t)header.id;
@@ -57,13 +57,14 @@ Operation::Operation(ContextPtr &context, EventPtr &event, int32_t type)
 
 Operation::Operation(ContextPtr &context, const MetaLog::EntityHeader &header_)
   : MetaLog::Entity(header_), m_context(context), m_state(OperationState::INITIAL),
-    m_error(0), m_blocked(false) {
+    m_error(0), m_remove_approvals(0), m_original_type(0), m_blocked(false) {
   m_hash_code = (int64_t)header.id;
 }
 
 void Operation::display(std::ostream &os) {
 
   os << " state=" << OperationState::get_text(m_state);
+  os << " remove_approvals=" << m_remove_approvals;
   if (m_state == OperationState::COMPLETE) {
     os << " [" << Error::get_text(m_error) << "] ";
     if (m_error != Error::OK)
@@ -109,7 +110,7 @@ void Operation::display(std::ostream &os) {
 }
 
 size_t Operation::encoded_length() const {
-  size_t length = 16;
+  size_t length = 20;
 
   if (m_state == OperationState::COMPLETE) {
     length += 8 + encoded_result_length();
@@ -134,6 +135,7 @@ void Operation::encode(uint8_t **bufp) const {
   Serialization::encode_i32(bufp, m_state);
   Serialization::encode_i64(bufp, m_expiration_time.sec);
   Serialization::encode_i32(bufp, m_expiration_time.nsec);
+  Serialization::encode_i32(bufp, m_remove_approvals);
   if (m_state == OperationState::COMPLETE) {
     Serialization::encode_i64(bufp, m_hash_code);
     encode_result(bufp);
@@ -159,6 +161,8 @@ void Operation::decode(const uint8_t **bufp, size_t *remainp) {
   m_state = Serialization::decode_i32(bufp, remainp);
   m_expiration_time.sec = Serialization::decode_i64(bufp, remainp);
   m_expiration_time.nsec = Serialization::decode_i32(bufp, remainp);
+  if (m_original_type == 0 || (m_original_type & 0xF0000L) > 0x20000L)
+    m_remove_approvals = Serialization::decode_i32(bufp, remainp);
   if (m_state == OperationState::COMPLETE) {
     m_hash_code = Serialization::decode_i64(bufp, remainp);
     decode_result(bufp, remainp);

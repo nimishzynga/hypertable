@@ -43,9 +43,9 @@ OperationMoveRange::OperationMoveRange(ContextPtr &context, const String &source
 				       const TableIdentifier &table, const RangeSpec &range,
 				       const String &transfer_log,
                                        uint64_t soft_limit, bool is_split)
-  : Operation(context, MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW),
+  : Operation(context, MetaLog::EntityType::OPERATION_MOVE_RANGE),
     m_table(table), m_range(range), m_transfer_log(transfer_log),
-    m_soft_limit(soft_limit), m_is_split(is_split), m_source(source), m_approval_count(0) {
+    m_soft_limit(soft_limit), m_is_split(is_split), m_source(source) {
   m_range_name = format("%s[%s..%s]", m_table.id, m_range.start_row, m_range.end_row);
   initialize_dependencies();
   m_hash_code = Utility::range_hash_code(m_table, m_range, "OperationMoveRange");
@@ -53,11 +53,11 @@ OperationMoveRange::OperationMoveRange(ContextPtr &context, const String &source
 
 OperationMoveRange::OperationMoveRange(ContextPtr &context,
                                        const MetaLog::EntityHeader &header_)
-  : Operation(context, header_), m_source("UNKNOWN"), m_approval_count(0) {
+  : Operation(context, header_), m_source("UNKNOWN") {
 }
 
 OperationMoveRange::OperationMoveRange(ContextPtr &context, EventPtr &event)
-  : Operation(context, event, MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW), m_approval_count(0) {
+  : Operation(context, event, MetaLog::EntityType::OPERATION_MOVE_RANGE) {
   const uint8_t *ptr = event->payload;
   size_t remaining = event->payload_len;
   decode_request(&ptr, &remaining);
@@ -219,7 +219,7 @@ size_t OperationMoveRange::encoded_state_length() const {
   return Serialization::encoded_length_vstr(m_source) +
     m_table.encoded_length() + m_range.encoded_length() +
     Serialization::encoded_length_vstr(m_transfer_log) + 9 +
-    Serialization::encoded_length_vstr(m_destination) + 4;
+    Serialization::encoded_length_vstr(m_destination);
 }
 
 void OperationMoveRange::encode_state(uint8_t **bufp) const {
@@ -230,20 +230,17 @@ void OperationMoveRange::encode_state(uint8_t **bufp) const {
   Serialization::encode_i64(bufp, m_soft_limit);
   Serialization::encode_bool(bufp, m_is_split);
   Serialization::encode_vstr(bufp, m_destination);
-  Serialization::encode_i32(bufp, m_approval_count);
 }
 
 void OperationMoveRange::decode_state(const uint8_t **bufp, size_t *remainp) {
   decode_request(bufp, remainp);
   m_destination = Serialization::decode_vstr(bufp, remainp);
-  if (header.type == MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW)
-    m_approval_count = Serialization::decode_i32(bufp, remainp);
-  else
-    header.type = MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW;
+  if (header.type == MetaLog::EntityType::OLD_OPERATION_MOVE_RANGE)
+    header.type = MetaLog::EntityType::OPERATION_MOVE_RANGE;
 }
 
 void OperationMoveRange::decode_request(const uint8_t **bufp, size_t *remainp) {
-  if (header.type == MetaLog::EntityType::OPERATION_MOVE_RANGE_NEW)
+  if (header.type == MetaLog::EntityType::OPERATION_MOVE_RANGE)
     m_source = Serialization::decode_vstr(bufp, remainp);
   m_table.decode(bufp, remainp);
   m_range.decode(bufp, remainp);
